@@ -1,186 +1,237 @@
-import { CiCircleChevDown, CiCircleChevUp } from "react-icons/ci";
-
+import { useEffect, useState } from "react";
+import { loadCart, saveCart, getTotal } from "../utils/cart";
+import { CiCircleChevUp, CiCircleChevDown } from "react-icons/ci";
 import { BiTrash } from "react-icons/bi";
-import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import toast from "react-hot-toast";
 import axios from "axios";
+import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
+
+const API = import.meta.env.VITE_API_URL;
 
 export default function CheckoutPage() {
-	const location = useLocation();
-	const navigate = useNavigate()
-	const [address, setAddress] = useState("");
-	const [name, setName] = useState("");
+
+  const navigate = useNavigate();
+
+  const [cart, setCart] = useState([]);
+
+  const [form, setForm] = useState({
+    name: "",
+    phone: "",
+    address: "",
+  });
+
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setCart(loadCart());
+  }, []);
+
+  function updateQty(index, amount) {
+
+    const newCart = [...cart];
+
+    newCart[index].quantity += amount;
+
+    if (newCart[index].quantity <= 0)
+      newCart.splice(index, 1);
+
+    setCart(newCart);
+
+    saveCart(newCart);
+  }
+
+  function removeItem(index) {
+
+    const newCart = [...cart];
+
+    newCart.splice(index, 1);
+
+    setCart(newCart);
+
+    saveCart(newCart);
+  }
+
+  async function placeOrder() {
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      toast.error("Please login first");
+      navigate("/login");
+      return;
+    }
+
+    if (!form.address) {
+      toast.error("Address required");
+      return;
+    }
+
+    if (cart.length === 0) {
+      toast.error("Cart empty");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+
+      const items = cart.map(item => ({
+        productID: item.productID,
+        quantity: item.quantity
+      }));
+
+      const res = await axios.post(
+        API + "/api/orders",
+        {
+          customerName: form.name,
+          phone: form.phone,
+          address: form.address,
+          items
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      toast.success("Order placed successfully");
+
+      saveCart([]);
+
+      navigate("/orders");
+
+    } catch (err) {
+
+      toast.error(err.response?.data?.message || "Order failed");
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
+  }
+
+  return (
+
+    <div className="min-h-screen bg-gray-100 flex justify-center p-4">
+
+      <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* LEFT */}
+        <div className="lg:col-span-2 bg-white p-4 rounded shadow">
+
+          <h2 className="text-xl font-bold mb-4">
+            Shipping Information
+          </h2>
+
+          <input
+            placeholder="Full name"
+            className="w-full border p-3 mb-3"
+            value={form.name}
+            onChange={e =>
+              setForm({ ...form, name: e.target.value })
+            }
+          />
+
+          <input
+            placeholder="Phone number"
+            className="w-full border p-3 mb-3"
+            value={form.phone}
+            onChange={e =>
+              setForm({ ...form, phone: e.target.value })
+            }
+          />
+
+          <textarea
+            placeholder="Shipping address"
+            className="w-full border p-3"
+            rows={4}
+            value={form.address}
+            onChange={e =>
+              setForm({ ...form, address: e.target.value })
+            }
+          />
+
+          <h2 className="text-xl font-bold mt-6 mb-4">
+            Cart Items
+          </h2>
+
+          {cart.map((item, index) => (
+
+            <div key={index}
+              className="flex gap-4 border-b py-4">
+
+              <img
+                src={item.image}
+                className="w-20 h-20 object-cover"
+              />
+
+              <div className="flex-1">
+
+                <h3 className="font-semibold">
+                  {item.name}
+                </h3>
+
+                <p>LKR {item.price}</p>
+
+                <div className="flex items-center gap-2">
+
+                  <CiCircleChevDown
+                    onClick={() => updateQty(index, -1)}
+                    className="text-2xl cursor-pointer"
+                  />
+
+                  <span>{item.quantity}</span>
+
+                  <CiCircleChevUp
+                    onClick={() => updateQty(index, 1)}
+                    className="text-2xl cursor-pointer"
+                  />
+
+                  <BiTrash
+                    onClick={() => removeItem(index)}
+                    className="text-red-500 cursor-pointer ml-4"
+                  />
+
+                </div>
+
+              </div>
+
+            </div>
+
+          ))}
+
+        </div>
 
 
-	const [cart, setCart] = useState(location.state);
+        {/* RIGHT */}
+        <div className="bg-white p-4 rounded shadow h-fit">
 
-	function getTotal() {
-		let total = 0;
-		cart.forEach((item) => {
-			total += item.price * item.quantity;
-		});
-		return total;
-	}
+          <h2 className="text-xl font-bold mb-4">
+            Order Summary
+          </h2>
 
-	async function purchaseCart(){
-		const token = localStorage.getItem("token");
-		if(token == null){
-			toast.error("Please login to place an order");
-			navigate("/login");
-			return;
-		}
-		try{
-			const items = []
+          <div className="flex justify-between mb-2">
+            <span>Total</span>
+            <span>LKR {getTotal().toFixed(2)}</span>
+          </div>
 
-			for(let i=0; i<cart.length; i++){
-				items.push(
-					{
-						productID : cart[i].productID,
-						quantity : cart[i].quantity
-					}
-				)
-			}
+          <button
+            onClick={placeOrder}
+            disabled={loading}
+            className="w-full bg-red-500 text-white py-3 mt-4 hover:bg-red-600"
+          >
+            {loading ? "Processing..." : "Place Order"}
+          </button>
 
-			await axios.post(import.meta.env.VITE_API_URL + "/api/orders",{
-				address : address,
-				customerName : name==""?null:name,
-				items: items
-			},{
-				headers: {
-					Authorization: `Bearer ${token}`,
-				},
-			})
+        </div>
 
-		toast.success("Order placed successfully");
-			
-		}catch(error){
-			toast.error("Failed to place order");
-			console.error(error);
+      </div>
 
-			//if error is 400
-			if(error.response && error.response.status == 400){
-						
-				toast.error(error.response.data.message)
+    </div>
 
-			}
-		}
-		
-	}
+  );
 
-	return (
-		<div className="w-full lg:h-[calc(100vh-100px)] overflow-y-scroll bg-primary flex flex-col pt-[25px] items-center">
-			<div className="w-[400px] lg:w-[600px] flex flex-col gap-4 ">
-				{cart.map((item, index) => {
-					return (
-						<div
-							key={index}
-							className="w-full h-[300px] lg:h-[120px] bg-white flex flex-col lg:flex-row relative items-center p-3 lg:p-0"
-						>
-							<button
-								className="absolute  text-red-500 right-[-40px] text-2xl rounded-full aspect-square hover:bg-red-500 hover:text-white p-[5px] font-bold"
-								onClick={() => {}}
-							>
-								<BiTrash />
-							</button>
-							<img
-								className="h-[100px] lg:h-full aspect-square object-cover"
-								src={item.image}
-							/>
-							<div className="w-full text-center lg:w-[200px] h-[100px] lg:h-full flex flex-col pl-[5px] pt-[10px] ">
-								<h1 className=" font-semibold text-lg w-full text-wrap">
-									{item.name}
-								</h1>
-								{/* productID */}
-								<span className="text-sm text-secondary ">
-									{item.productID}
-								</span>
-							</div>
-							<div className="w-[100px] h-full flex flex-row lg:flex-col justify-center items-center ">
-								<CiCircleChevUp
-									className="text-3xl"
-									onClick={() => {
-										const newCart = [...cart];
-
-										newCart[index].quantity += 1;
-
-										setCart(newCart);
-									}}
-								/>
-								<span className="font-semibold text-4xl">{item.quantity}</span>
-								<CiCircleChevDown
-									className="text-3xl"
-									onClick={() => {
-										const newCart = [...cart];
-
-										if (newCart[index].quantity > 1) {
-											newCart[index].quantity -= 1;
-										}
-
-										setCart(newCart);
-									}}
-								/>
-							</div>
-							<div className="w-full lg:w-[180px] lg:h-full items-center justify-center  flex flex-row lg:flex-col">
-								{item.labelledPrice > item.price && (
-									<span className="text-secondary lg:w-full   text-center  lg:text-right line-through text-lg pr-[10px] lg:mt-[20px]">
-										LKR {item.labelledPrice.toFixed(2)}
-									</span>
-								)}
-								<span className="font-semibold text-accent  lg:w-full text-center  lg:text-right text-2xl pr-[10px] lg:mt-[5px]">
-									LKR {item.price.toFixed(2)}
-								</span>
-							</div>
-						</div>
-					);
-				})}
-				<div className="w-full border lg:w-full  bg-white flex flex-col    items-center relative">
-					<div className="w-full  h-full flex  justify-between items-center p-4">
-						<label
-							htmlFor="name"							
-							className="text-sm text-secondary mr-2"
-						>
-							Name
-						</label>
-						<input
-							type="text"
-							id="name"
-							value={name}
-							onChange={(e) => setName(e.target.value)}
-							className="w-[400px] h-[50px] border border-secondary rounded-md px-3 text-center"
-						/>
-					</div>
-					<div className="w-full  h-full flex  justify-between items-center p-4">
-						<label
-							htmlFor="address"							
-							className="text-sm text-secondary mr-2"
-						>
-							Shipping Address
-						</label>
-						<textarea
-							type="text"
-							id="address"
-							value={address}
-							onChange={(e) => setAddress(e.target.value)}
-							className="w-[400px] h-[150px] border border-secondary rounded-md px-3 text-center"
-						/>
-					</div>
-				</div>
-				<div className="w-full lg:w-full h-[120px] bg-white flex flex-col-reverse  lg:flex-row justify-end items-center relative">
-					<button
-						to="/checkout"
-						onClick={purchaseCart}
-						className="lg:absolute left-0 bg-accent text-white px-6 py-3  lg:ml-[20px] hover:bg-accent/80"
-					>
-						Order
-					</button>
-					<div className="h-[50px]">
-						<span className="font-semibold text-accent w-full text-right text-2xl pr-[10px] mt-[5px]">
-							Total: LKR {getTotal().toFixed(2)}
-						</span>
-					</div>
-				</div>
-			</div>
-		</div>
-	);
 }
