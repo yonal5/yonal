@@ -1,72 +1,40 @@
-export function loadCart(){
-    let cartString = localStorage.getItem("cart") // "[item1, item2]"
+export function loadCart() {
 
-    if(cartString == null){
-        localStorage.setItem("cart", "[]")
-        cartString = "[]"
-    }
+  return JSON.parse(localStorage.getItem("cart") || "[]");
 
-    const cart = JSON.parse(cartString)
-
-    return cart
 }
 
-export function addToCart(product, quantity){
-    let cart = loadCart()
+export function saveCart(cart) {
 
-    const existingItemIndex = cart.findIndex(
-        (item)=>{
-            return item.productID == product.productID
-        }
-    )
+  localStorage.setItem("cart", JSON.stringify(cart));
 
-    if(existingItemIndex == -1){
-        // item not in cart
-
-        if(quantity<1){
-            console.log("Quantity must be at least 1")
-            return
-        }
-
-        const cartItem = {
-            productID: product.productID,
-            name: product.name,
-            price: product.price,
-            labelledPrice: product.labelledPrice,
-            quantity: quantity,
-            image: product.images[0]
-        }
-        cart.push(cartItem)
-
-    }else{
-        
-        const existingItem = cart[existingItemIndex]
-
-        const newQuantity = existingItem.quantity + quantity
-
-        if(newQuantity<1){
-            cart = cart.filter(
-                (item)=>{
-                    return item.productID != product.productID
-                }
-            )
-        }else{
-            cart[existingItemIndex].quantity = newQuantity
-        }
-    }
-
-    localStorage.setItem("cart", JSON.stringify(cart))
 }
-export function getTotal(){
 
-    const cart = loadCart()
-    
-    let total = 0
+export function addToCart(product, qty = 1) {
 
-    cart.forEach(
-        (item)=>{
-            total += item.price * item.quantity
-        }
-    )
-    return total
+  let cart = loadCart();
+
+  const index = cart.findIndex(
+    i => i.productID === product.productID
+  );
+
+  if (index >= 0)
+    cart[index].quantity += qty;
+  else
+    cart.push({ ...product, quantity: qty });
+
+  saveCart(cart);
+
+}
+
+export function getTotal() {
+
+  const cart = loadCart();
+
+  return cart.reduce(
+    (total, item) =>
+      total + item.price * item.quantity,
+    0
+  );
+
 }
